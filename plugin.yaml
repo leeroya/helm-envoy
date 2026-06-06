@@ -1,0 +1,21 @@
+name: "envoy"
+version: "0.1.0"
+usage: "helm envoy [command] [flags] -- [helm flags]"
+description: |-
+  Environment-aware Helm value file manager.
+  Automatically applies environment-specific value files (values-<env>.yaml)
+  when deploying charts.
+
+  Commands:
+    install   <release> <chart> --environment <env> [-- helm flags]
+    upgrade   <release> <chart> --environment <env> [-- helm flags]
+    list-environments <chart-path>
+
+platformCommand:
+  - os: windows
+    arch: amd64
+    command: "powershell -ExecutionPolicy Bypass -File $HELM_PLUGIN_DIR/scripts/envoy.ps1"
+  - os: windows
+    arch: arm64
+    command: "powershell -ExecutionPolicy Bypass -File $HELM_PLUGIN_DIR/scripts/envoy.ps1"
+command: "$HELM_PLUGIN_DIR/scripts/envoy.sh"
