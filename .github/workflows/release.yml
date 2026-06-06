@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Update plugin.yaml version
+        run: |
+          sed -i "s/^version: .*/version: \"${{ steps.version.outputs.VERSION }}\"/" plugin.yaml
+
+      - name: Package plugin
+        run: |
+          ARCHIVE="helm-envoy-${{ steps.version.outputs.VERSION }}.tar.gz"
+          tar -czf "$ARCHIVE" \
+            plugin.yaml \
+            scripts/
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          sha256sum "$ARCHIVE" | awk '{print $1}' > "$ARCHIVE.sha256"
+          echo "SHA256=$(cat $ARCHIVE.sha256)" >> "$GITHUB_ENV"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          cat <<EOF > notes.md
+          ## Installation
+          \`\`\`
+          helm plugin install https://github.com/${{ github.repository }}
+          \`\`\`
+
+          ## Upgrade
+          \`\`\`
+          helm plugin update envoy
+          \`\`\`
+
+          ## SHA256
+          \`$(cat ${{ env.ARCHIVE }}.sha256)\`
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: |
+            ${{ env.ARCHIVE }}
+            ${{ env.ARCHIVE }}.sha256

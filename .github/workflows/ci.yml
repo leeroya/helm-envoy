@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+    branches: ["master", "main"]
+
+jobs:
+  lint:
+    name: Lint shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Lint envoy.sh
+        run: shellcheck scripts/envoy.sh
+
+  validate:
+    name: Validate plugin.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required plugin.yaml fields
+        run: |
+          for field in name version usage description command; do
+            grep -q "^$field:" plugin.yaml || { echo "Missing field: $field"; exit 1; }
+          done
+          echo "plugin.yaml looks good."
+
+  test:
+    name: Integration test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Install helm-envoy plugin
+        run: helm plugin install .
+
+      - name: Verify plugin is registered
+        run: helm plugin list | grep -q envoy
+
+      - name: Show help
+        run: helm envoy help
+
+      - name: Create test chart fixtures
+        run: |
+          mkdir -p /tmp/test-chart
+          cat > /tmp/test-chart/values.yaml <<EOF
+          replicaCount: 1
+          EOF
+          cat > /tmp/test-chart/values-staging.yaml <<EOF
+          replicaCount: 2
+          environment: staging
+          EOF
+          cat > /tmp/test-chart/values-production.yaml <<EOF
+          replicaCount: 5
+          environment: production
+          EOF
+
+      - name: Test list-environments
+        run: |
+          output=$(helm envoy list-environments /tmp/test-chart)
+          echo "$output"
+          echo "$output" | grep -q "staging"
+          echo "$output" | grep -q "production"
+
+      - name: Test missing environment error
+        run: |
+          ! helm envoy install test-release /tmp/test-chart --environment nonexistent 2>&1 | grep -q "no value file found"
